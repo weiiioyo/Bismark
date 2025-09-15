@@ -44,7 +44,7 @@ my ($genome_folder,$CT_index_basename,$GA_index_basename,$path_to_bowtie,$path_t
 $directional,$unmapped,$ambiguous,$phred64,$output_dir,$bowtie2,$hisat2,$sam_no_hd,$skip,$upto,$temp_dir,$non_bs_mm,$insertion_open,
 $insertion_extend,$deletion_open,$deletion_extend,$gzip,$bam,$samtools_path,$pbat,$prefix,$old_flag,$basename,$score_min_intercept,
 $score_min_slope,$bt2_large_index,$multicore,$rg_tag,$rg_id,$rg_sample,$ambig_bam,$cram,$cram_ref,$nucleotide_coverage,$dovetail,
-$aligner_version,$slam,$icpc,$local,$strandID,$mm2,$maximum_length_cutoff) = process_command_line();
+$aligner_version,$slam,$icpc,$local,$strandID,$mm2,$maximum_length_cutoff,$add_barcode,$add_umi) = process_command_line();
 
 
 my @fhs;         # stores alignment process names, bisulfite index location, bowtie filehandles and the number of times sequences produced an alignment
@@ -7312,6 +7312,8 @@ sub process_command_line{
 	my $mm2_nanopore;
 	my $maximum_length_cutoff;
 	my $strandID;
+	my $add_barcode;
+	my $add_umi;
 
 
 	my $command_line = GetOptions ('help'  => \$help,
@@ -7379,6 +7381,8 @@ sub process_command_line{
 				 'mm2_pacbio|pacbio'       => \$mm2_pacbio,
 				 'mm2_nanopore|nanopore'   => \$mm2_nanopore,
 				 'strandID'                => \$strandID,
+				 'add_barcode'             => \$add_barcode,
+				 'add_umi'                 => \$add_umi,
 				);
 
 
@@ -8444,7 +8448,7 @@ VERSION
 	$directional,$unmapped,$multi_map,$phred64,$output_dir,$bowtie2,$hisat2,$sam_no_hd,$skip,$qupto,$temp_dir,$non_bs_mm,$insertion_open,
 	$insertion_extend,$deletion_open,$deletion_extend,$gzip,$bam,$samtools_path,$pbat,$prefix,$old_flag,$basename,$score_min_intercept,
 	$score_min_slope,$bt2_large_index_present,$multicore,$rg_tag,$rg_id,$rg_sample,$ambig_bam,$cram,$cram_ref,$nucleotide_coverage,$dovetail,
-	$aligner_version,$slam,$icpc,$local,$strandID,$mm2,$maximum_length_cutoff);
+	$aligner_version,$slam,$icpc,$local,$strandID,$mm2,$maximum_length_cutoff,$add_barcode,$add_umi);
 }
 
 
@@ -8498,6 +8502,22 @@ sub single_end_SAM_output{
 	my $read_conversion   = $methylation_call_params->{$id}->{read_conversion};
 	my $genome_conversion = $methylation_call_params->{$id}->{genome_conversion};
 	my $number_of_mismatches;
+	my $barcode_tag = "";
+	my $umi_tag = "";
+	if ($add_barcode) {
+		my $barcode = (split (/_/, $id))[0];
+		$barcode_tag = "CB:Z:$barcode";
+	}else{
+		$barcode_tag = "";
+	}
+
+	if($add_umi) {
+		my $umi = (split (/_/, $id))[1];
+		$umi_tag = "UR:Z:$umi";
+	}else{
+		$umi_tag = "";
+	}
+
 
 	$number_of_mismatches= $methylation_call_params->{$id}->{alignment_score};
 
@@ -8691,19 +8711,19 @@ sub single_end_SAM_output{
 	### optionally print number of non-bisulfite mismatches
 	if ($non_bs_mm){
 		if ($rg_tag){
-			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$XA_tag,$read_group)),"\n";
+			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$XA_tag,$read_group,$barcode_tag,$umi_tag)),"\n";
 		}
 		else{
-			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$XA_tag)),"\n";
+			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$XA_tag,$barcode_tag,$umi_tag)),"\n";
 		}
 	}
 	else{ # default
 		# SAM format: QNAME, FLAG, RNAME, 1-based POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, optional fields
 		if ($rg_tag){
-			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$read_group)),"\n";
+			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$read_group,$barcode_tag,$umi_tag)),"\n";
 		}
 		else{
-			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag)),"\n";
+			print OUT join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag,$XA_tag,$barcode_tag,$umi_tag)),"\n";
 			# warn "FINAL OUTPUT:\n";	
 			# warn join("\t",($id,$flag,$chr,$start,$mapq,$cigar,$rnext,$pnext,$tlen,$actual_seq,$qual,$NM_tag,$MD_tag,$XM_tag,$XR_tag,$XG_tag)),"\n";
 		}
@@ -8723,6 +8743,22 @@ sub paired_end_SAM_output{
 	my $read_conversion_1       = $methylation_call_params->{$id}->{read_conversion_1};
 	my $read_conversion_2       = $methylation_call_params->{$id}->{read_conversion_2};
 	my $genome_conversion       = $methylation_call_params->{$id}->{genome_conversion};
+	my $barcode_tag = "";
+	my $umi_tag = "";
+	if ($add_barcode) {
+		my $barcode = (split (/_/, $id))[0];
+		$barcode_tag = "CB:Z:$barcode";
+	}else{
+		$barcode_tag = "";
+	}
+
+
+	if($add_umi) {
+		my $umi = (split (/_/, $id))[1];
+		$umi_tag = "UR:Z:$umi";
+	}else{
+		$umi_tag = "";
+	}
 
 	my $id_1;
 	my $id_2;
@@ -9189,33 +9225,33 @@ sub paired_end_SAM_output{
 	### optionally print number of non-bisulfite mismatches
 	if ($non_bs_mm){
 		if ($rg_tag){
-			print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$XA_tag,$read_group)), "\n";
-			print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$XB_tag,$read_group)), "\n";
+			print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$XA_tag,$read_group,$barcode_tag,$umi_tag)), "\n";
+			print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$XB_tag,$read_group,$barcode_tag,$umi_tag)), "\n";
 		}
 		else{
-			print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$XA_tag)), "\n";
-			print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$XB_tag)), "\n";
+			print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$XA_tag,$barcode_tag,$umi_tag)), "\n";
+			print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$XB_tag,$barcode_tag,$umi_tag)), "\n";
 		}
 	}
 	else{ # default
 		if ($rg_tag){
 			if ($strandID){
-				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$read_group,$strandID_str)), "\n";
-				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$read_group,$strandID_str)), "\n";
+				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$read_group,$strandID_str,$barcode_tag,$umi_tag)), "\n";
+				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$read_group,$strandID_str,$barcode_tag,$umi_tag)), "\n";
 			}
 			else{
-				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$read_group)), "\n";
-				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$read_group)), "\n";
+				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$read_group,$barcode_tag,$umi_tag)), "\n";
+				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$read_group,$barcode_tag,$umi_tag)), "\n";
 			}
 		}
 		else{
 			if ($strandID){
-				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$strandID_str)), "\n";
-				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$strandID_str)), "\n";
+				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$strandID_str,$barcode_tag,$umi_tag)), "\n";
+				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$strandID_str,$barcode_tag,$umi_tag)), "\n";
 			}
 			else{
-				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag)), "\n";
-				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag)), "\n";
+				print OUT join("\t", ($id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag,$barcode_tag,$umi_tag)), "\n";
+				print OUT join("\t", ($id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag,$barcode_tag,$umi_tag)), "\n";
 			}
 			#print join("\t", ("READ 1:",$id_1, $flag_1, $chr, $start_read_1, $mapq, $cigar_1, $rnext, $pnext_1, $tlen_1, $actual_seq_1, $qual_1, $NM_tag_1, $MD_tag_1, $XM_tag_1,$XR_tag_1,$XG_tag)), "\n";
 			#print join("\t", ("READ 2:",$id_2, $flag_2, $chr, $start_read_2, $mapq, $cigar_2, $rnext, $pnext_2, $tlen_2, $actual_seq_2, $qual_2, $NM_tag_2, $MD_tag_2, $XM_tag_2,$XR_tag_2,$XG_tag)), "\n";
@@ -9865,7 +9901,8 @@ Output:
                          that R1 and R2 have the same read ID). Paired-end mapping already creates BAM files with identical read IDs.
                          For more information please see here: https://github.com/FelixKrueger/Bismark/issues/236. Default: OFF.
 
-
+--add_barcode            Add CB(error-corrected barcode) tag.
+--add_umi                Add UR(raw UMI) tag.
 OTHER:
 
 -h/--help                Displays this help file.
@@ -10018,6 +10055,8 @@ Bismark BAM/SAM OUTPUT (default):
 (15) XR-tag (read conversion state for the alignment)
 (16) XG-tag (genome conversion state for the alignment)
 (17) XA/XB-tag (non-bisulfite mismatches) (optional!)
+(18) CB-tag (error-corrected barcode)
+(19) UMI-tag (raw UMI)
 
 Each read of paired-end alignments is written out in a separate line in the above format.
 
