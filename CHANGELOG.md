@@ -1,5 +1,10 @@
 # Bismark Changelog
 
+## Changelog for Bismark v0.25.2 (release on 22 Sep 2025)
+
+### Bismark
+
+- Added two parameters --add_barcode and --add_umi. --add_barcode splits the read name by underscore and extracts the first field to add as CB tag to the BAM file, --add_umi splits the read name by underscore and extracts the second field to add as CR tag (Raw UMI) to the BAM file.
 
 ## Changelog for Bismark v0.25.1 (release on 06 Aug 2025)
 
